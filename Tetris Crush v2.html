@@ -515,7 +515,7 @@
     gap: 10px;
   }
 
-  .btn-export, .btn-import, .btn-reset-global, .btn-screenshot {
+  .btn-export, .btn-import, .btn-reset-global {
     font-size: 12px;
     padding: 7px 14px;
     letter-spacing: 1px;
@@ -627,7 +627,6 @@
   }
 </style>
 </head>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <body>
 
 <div class="bg-stage" id="bgStage">
@@ -644,7 +643,6 @@
   <div class="footer-actions">
     <button class="btn-export" id="btnExport">&#8595; Export</button>
     <button class="btn-import" id="btnImport">&#8593; Import</button>
-    <button class="btn-screenshot" id="btnScreenshot" title="Spielfeld als PNG speichern">&#128247; Bild</button>
     <button class="btn-reset-global" id="btnResetAll" title="Alle Teams zurücksetzen"></button>
   </div>
 </div>
@@ -1784,60 +1782,6 @@ function updateBackground() {
     }
   }
 }
-
-// ============================================================
-// SCREENSHOT
-// ============================================================
-async function captureScreenshot() {
-  const btn = document.getElementById('btnScreenshot');
-  btn.disabled = true;
-  btn.textContent = '...';
-
-  const footer = document.querySelector('.footer');
-  footer.setAttribute('data-html2canvas-ignore', 'true');
-
-  const h1 = document.querySelector('h1');
-  const container = document.getElementById('teamsContainer');
-  const pad = 28;
-  const h1Rect        = h1.getBoundingClientRect();
-  const containerRect = container.getBoundingClientRect();
-  const cropY = Math.max(0, h1Rect.top - pad);
-  const cropH = containerRect.bottom + pad - cropY;
-  const cropW = window.innerWidth;
-
-  try {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const full = await html2canvas(document.body, {
-      backgroundColor: '#1f1f1f',
-      useCORS:      true,
-      scale:        dpr,
-      logging:      false,
-      windowWidth:  window.innerWidth,
-      windowHeight: window.innerHeight,
-    });
-
-    const crop = document.createElement('canvas');
-    crop.width  = Math.round(cropW * dpr);
-    crop.height = Math.round(cropH * dpr);
-    crop.getContext('2d').drawImage(
-      full,
-      0, Math.round(cropY * dpr), Math.round(cropW * dpr), Math.round(cropH * dpr),
-      0, 0, crop.width, crop.height
-    );
-
-    const ts   = new Date().toISOString().slice(0,16).replace('T','-').replace(/:/g,'-');
-    const link = document.createElement('a');
-    link.download = `tetris-crush-${ts}.png`;
-    link.href = crop.toDataURL('image/png');
-    link.click();
-  } finally {
-    footer.removeAttribute('data-html2canvas-ignore');
-    btn.disabled = false;
-    btn.textContent = '📷 Bild';
-  }
-}
-
-document.getElementById('btnScreenshot').addEventListener('click', captureScreenshot);
 
 document.getElementById('btnExport').addEventListener('click', exportState);
 
