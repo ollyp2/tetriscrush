@@ -613,6 +613,36 @@
   .lc-shake-m { animation: lcGridShake 0.48s ease-out both; }
   .lc-shake-l { animation: lcGridShake 0.68s ease-out both; }
 
+  /* Logo context menu */
+  .logo-menu {
+    background: #222;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    padding: 4px 0;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.65);
+    min-width: 160px;
+  }
+  .logo-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 9px 16px;
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 12px;
+    letter-spacing: 1px;
+    background: none;
+    border: none;
+    border-radius: 0;
+    color: #e8e8e8;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: background 0.1s, color 0.1s;
+  }
+  .logo-menu button:hover {
+    background: var(--accent, #45a454);
+    color: #fff;
+  }
+
   .lc-screen-flash {
     position: fixed;
     inset: 0;
@@ -997,14 +1027,7 @@ function buildTeamUI(team, idx) {
   logo.className = 'team-logo';
   logo.src = team.logo;
   logo.alt = `${team.name} Logo`;
-  logo.addEventListener('click', () => {
-    const url = prompt('Bild-URL für Team-Logo:', team.logo);
-    if (url && url.trim()) {
-      team.logo = url.trim();
-      logo.src = team.logo;
-      saveTeam(team);
-    }
-  });
+  logo.addEventListener('click', (e) => showLogoMenu(team, logo, e));
   header.appendChild(logo);
 
   const name = document.createElement('div');
@@ -1855,6 +1878,78 @@ document.getElementById('importFileInput').addEventListener('change', (e) => {
 const btnResetAll = document.getElementById('btnResetAll');
 btnResetAll.innerHTML = TRASH_SVG + ' Reset';
 btnResetAll.addEventListener('click', onResetAllClick);
+
+// ============================================================
+// ============================================================
+// LOGO UPLOAD MENU
+// ============================================================
+const _logoFileInput = (() => {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*';
+  inp.style.display = 'none';
+  document.body.appendChild(inp);
+  return inp;
+})();
+
+let _logoMenuTarget = null;
+
+_logoFileInput.addEventListener('change', () => {
+  const file = _logoFileInput.files[0];
+  if (!file || !_logoMenuTarget) return;
+  const { team, logoEl } = _logoMenuTarget;
+  _logoMenuTarget = null;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    team.logo = ev.target.result;
+    logoEl.src = team.logo;
+    saveTeam(team);
+  };
+  reader.readAsDataURL(file);
+  _logoFileInput.value = '';
+});
+
+function showLogoMenu(team, logoEl, e) {
+  e.stopPropagation();
+  document.querySelector('.logo-menu')?.remove();
+
+  const rect = logoEl.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.className = 'logo-menu';
+  menu.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.bottom + 6}px;z-index:1000;`;
+
+  const mkBtn = (label, fn) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.addEventListener('click', (ev) => { ev.stopPropagation(); menu.remove(); fn(); });
+    menu.appendChild(b);
+  };
+
+  mkBtn('🔗  URL eingeben', () => {
+    const cur = team.logo.startsWith('data:') ? '' : team.logo;
+    const url = prompt('Bild-URL für Team-Logo:', cur);
+    if (url && url.trim()) {
+      team.logo = url.trim();
+      logoEl.src = team.logo;
+      saveTeam(team);
+    }
+  });
+
+  mkBtn('📁  Bild hochladen', () => {
+    _logoMenuTarget = { team, logoEl };
+    _logoFileInput.click();
+  });
+
+  document.body.appendChild(menu);
+
+  const close = (ev) => {
+    if (!menu.contains(ev.target)) {
+      menu.remove();
+      document.removeEventListener('click', close, true);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', close, true), 0);
+}
 
 // ============================================================
 // INIT
