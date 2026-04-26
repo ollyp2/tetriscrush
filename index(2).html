@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Team Tetris Crush</title>
+<style>
+  :root {
+    --bg: #1f1f1f;
+    --panel: #2a2a2a;
+    --grid-line: #3a3a3a;
+    --grid-cell: #242424;
+    --text: #e8e8e8;
+    --text-dim: #888;
+    --danger: #c44;
+    /* Defaults — werden pro Team via data-team überschrieben */
+    --accent: #45a454;
+    --accent-light: #5cc06c;
+    --accent-ghost: rgba(69, 164, 84, 0.4);
+  }
+
+  /* Team A: warmes Hellblau, dunkel genug für Weiß-Kontrast */
+  .team[data-team="1"] {
+    --accent: #3a8fc4;
+    --accent-light: #57a8da;
+    --accent-ghost: rgba(58, 143, 196, 0.4);
+  }
+  /* Team B: warmes Orange */
+  .team[data-team="2"] {
+    --accent: #d97a2b;
+    --accent-light: #ed9344;
+    --accent-ghost: rgba(217, 122, 43, 0.4);
+  }
+  /* Team C: warmes Rosa Neon-Pink, mit Weiß-Kontrast */
+  .team[data-team="3"] {
+    --accent: #d6298b;
+    --accent-light: #eb4ba3;
+    --accent-ghost: rgba(214, 41, 139, 0.4);
+  }
+  /* Team D: CCONE Grün */
+  .team[data-team="4"] {
+    --accent: #45a454;
+    --accent-light: #5cc06c;
+    --accent-ghost: rgba(69, 164, 84, 0.4);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', Consolas, monospace;
+    min-height: 100vh;
+    overflow-x: auto;
+  }
+
+  body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  /* ==========================================================
+     DYNAMISCHER HINTERGRUND
+     ========================================================== */
+  .bg-stage {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .bg-mosaic {
+    /* Skaliert größer als Viewport, Overflow erwünscht (~1/3 versteckt). */
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 150vw;
+    height: 150vh;
+    transform: translate(-50%, -50%);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 0;
+  }
+
+  .bg-tile {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    grid-template-rows: repeat(20, 1fr);
+    gap: 3px;
+    padding: 3px;
+    overflow: hidden;
+  }
+  .bg-tile[data-tx="1"] { transform: scaleX(-1); }
+  .bg-tile[data-tx="2"] { transform: rotate(180deg); }
+  .bg-tile[data-tx="3"] { transform: scaleY(-1); }
+
+  .bg-cell {
+    background: rgba(255,255,255,0.015);
+    border-radius: 2px;
+  }
+  .bg-cell.filled {
+    /* Farbe wird per inline style pro Team gesetzt */
+    opacity: 1;
+    box-shadow: 0 0 12px rgba(0,0,0,0.3);
+  }
+
+  .bg-overlay {
+    /* Dunkler Overlay-Schatten, vignettiert. */
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse at center, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.78) 100%),
+      linear-gradient(rgba(31,31,31,0.45), rgba(31,31,31,0.45));
+  }
+
+  /* Hauptinhalt über den Hintergrund-Layern */
+  h1, .teams-container, .footer {
+    position: relative;
+    z-index: 2;
+  }
+
+  h1 {
+    font-size: 18px;
+    font-weight: normal;
+    letter-spacing: 4px;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+    text-transform: uppercase;
+  }
+
+  .teams-container {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: nowrap;
+    min-width: min-content;
+  }
+
+  .team {
+    background: var(--panel);
+    border: 1px solid var(--grid-line);
+    border-radius: 4px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 280px;
+  }
+
+  .team-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    width: 100%;
+  }
+
+  .team-logo {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    cursor: pointer;
+    object-fit: cover;
+    border: 2px solid var(--grid-line);
+    transition: border-color 0.15s;
+  }
+  .team-logo:hover { border-color: var(--accent); }
+
+  .team-name {
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 2px;
+    user-select: none;
+  }
+  .team-name:hover { background: var(--grid-cell); }
+
+  .team-name-input {
+    font-family: inherit;
+    font-size: 18px;
+    font-weight: bold;
+    background: var(--grid-cell);
+    color: var(--text);
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    padding: 2px 6px;
+    text-align: center;
+    width: 200px;
+    outline: none;
+  }
+
+  .team-score {
+    font-size: 24px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 1px;
+  }
+
+  .go-counter {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    margin-top: -2px;
+  }
+  .go-counter strong {
+    color: var(--text);
+    font-weight: bold;
+  }
+
+  .preview-section {
+    display: flex;
+    gap: 18px;
+    justify-content: center;
+    margin-bottom: 12px;
+  }
+
+  .preview-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .preview-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+
+  .preview-label.active {
+    color: var(--accent);
+  }
+
+  .next-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 18px);
+    grid-template-rows: repeat(4, 18px);
+    gap: 1px;
+    background: var(--grid-line);
+    padding: 1px;
+    border-radius: 2px;
+  }
+
+  .next-grid.active {
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+
+  .next-cell {
+    background: var(--grid-cell);
+    overflow: hidden;
+  }
+
+  .next-cell.filled {
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 22px;
+    font-weight: bold;
+    line-height: 1;
+    overflow: hidden;
+  }
+  .next-cell.filled::before {
+    content: "☺";
+    transform: rotate(90deg);
+    display: inline-block;
+    line-height: 1;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(10, 22px);
+    grid-template-rows: repeat(20, 22px);
+    gap: 1px;
+    background: var(--grid-line);
+    padding: 1px;
+    border-radius: 2px;
+    position: relative;
+    cursor: default;
+  }
+
+  .grid.placing {
+    cursor: pointer;
+  }
+
+  .cell {
+    background: var(--grid-cell);
+    transition: background 0.05s;
+    overflow: hidden;
+  }
+
+  .cell.filled,
+  .cell.last-placed {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 26px;
+    font-weight: bold;
+    line-height: 1;
+    overflow: hidden;
+  }
+  .cell.filled { background: var(--accent); }
+  .cell.last-placed { background: var(--accent-light); }
+  .cell.filled::before,
+  .cell.last-placed::before {
+    content: "☺";
+    transform: rotate(90deg);
+    display: inline-block;
+    line-height: 1;
+  }
+
+  .cell.ghost {
+    background: var(--accent-ghost);
+  }
+
+  .cell.cleared {
+    animation: clearflash 0.25s ease-out;
+  }
+  @keyframes clearflash {
+    0% { background: white; }
+    100% { background: var(--grid-cell); }
+  }
+
+  .game-over-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 2px;
+    z-index: 10;
+  }
+
+  .game-over-text {
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--danger);
+    letter-spacing: 3px;
+    margin-bottom: 8px;
+  }
+
+  .game-over-score {
+    font-size: 16px;
+    color: var(--text);
+    margin-bottom: 16px;
+  }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  button {
+    font-family: inherit;
+    background: var(--grid-cell);
+    color: var(--text);
+    border: 1px solid var(--grid-line);
+    padding: 8px 14px;
+    cursor: pointer;
+    border-radius: 2px;
+    font-size: 13px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  button:hover:not(:disabled) {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .btn-go {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+    font-weight: bold;
+    flex: 1;
+    padding: 10px 14px;
+    justify-content: center;
+  }
+  .btn-go:hover:not(:disabled) {
+    background: var(--accent-light);
+    border-color: var(--accent-light);
+  }
+  .btn-go.placing {
+    background: var(--grid-cell);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .btn-rotate {
+    width: 44px;
+    padding: 10px;
+    font-size: 18px;
+    line-height: 1;
+    justify-content: center;
+  }
+
+  .footer {
+    margin-top: 24px;
+    color: var(--text-dim);
+    font-size: 11px;
+    letter-spacing: 1px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .footer-hint {
+    color: var(--text-dim);
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+
+  .footer-actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .btn-export, .btn-import, .btn-reset-global {
+    font-size: 12px;
+    padding: 7px 14px;
+    letter-spacing: 1px;
+  }
+
+  .btn-reset-global {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7px 10px;
+  }
+  .btn-reset-global:hover:not(:disabled) {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: white;
+  }
+  .btn-reset-global svg {
+    flex-shrink: 0;
+  }
+
+  #importFileInput {
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-stage" id="bgStage">
+  <div class="bg-mosaic" id="bgMosaic"></div>
+</div>
+<div class="bg-overlay"></div>
+
+<h1>Team Tetris Crush</h1>
+
+<div class="teams-container" id="teamsContainer"></div>
+
+<div class="footer">
+  <div class="footer-hint">R = Rotieren · Klick = Platzieren · Letzten Block anklicken zum Umsetzen</div>
+  <div class="footer-actions">
+    <button class="btn-export" id="btnExport">&#8595; Export</button>
+    <button class="btn-import" id="btnImport">&#8593; Import</button>
+    <button class="btn-reset-global" id="btnResetAll" title="Alle Teams zurücksetzen"></button>
+  </div>
+</div>
+<input type="file" id="importFileInput" accept=".json,application/json">
+
+<script>
+// ============================================================
+// CONSTANTS
+// ============================================================
+const COLS = 10;
+const ROWS = 20;
+const SEQUENCE_LENGTH = 250;
+const SEED = 42;
+const TEAM_COUNT = 4;
+const DEFAULT_NAMES = ['Team Alpha', 'Team Bravo', 'Team Charlie', 'Team Delta'];
+const SCORE_TABLE = { 1: 100, 2: 300, 3: 500, 4: 800 };
+
+// Tetromino definitions - all 4 rotations precomputed
+const TETROMINOS = {
+  I: [
+    [[1,0],[1,1],[1,2],[1,3]],
+    [[0,2],[1,2],[2,2],[3,2]],
+    [[2,0],[2,1],[2,2],[2,3]],
+    [[0,1],[1,1],[2,1],[3,1]]
+  ],
+  O: [
+    [[0,1],[0,2],[1,1],[1,2]],
+    [[0,1],[0,2],[1,1],[1,2]],
+    [[0,1],[0,2],[1,1],[1,2]],
+    [[0,1],[0,2],[1,1],[1,2]]
+  ],
+  T: [
+    [[0,1],[1,0],[1,1],[1,2]],
+    [[0,1],[1,1],[1,2],[2,1]],
+    [[1,0],[1,1],[1,2],[2,1]],
+    [[0,1],[1,0],[1,1],[2,1]]
+  ],
+  S: [
+    [[0,1],[0,2],[1,0],[1,1]],
+    [[0,1],[1,1],[1,2],[2,2]],
+    [[1,1],[1,2],[2,0],[2,1]],
+    [[0,0],[1,0],[1,1],[2,1]]
+  ],
+  Z: [
+    [[0,0],[0,1],[1,1],[1,2]],
+    [[0,2],[1,1],[1,2],[2,1]],
+    [[1,0],[1,1],[2,1],[2,2]],
+    [[0,1],[1,0],[1,1],[2,0]]
+  ],
+  J: [
+    [[0,0],[1,0],[1,1],[1,2]],
+    [[0,1],[0,2],[1,1],[2,1]],
+    [[1,0],[1,1],[1,2],[2,2]],
+    [[0,1],[1,1],[2,0],[2,1]]
+  ],
+  L: [
+    [[0,2],[1,0],[1,1],[1,2]],
+    [[0,1],[1,1],[2,1],[2,2]],
+    [[1,0],[1,1],[1,2],[2,0]],
+    [[0,0],[0,1],[1,1],[2,1]]
+  ]
+};
+const TETROMINO_NAMES = Object.keys(TETROMINOS);
+
+// ============================================================
+// DETERMINISTIC PRNG (Mulberry32)
+// ============================================================
+function mulberry32(seed) {
+  return function() {
+    let t = seed += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function generateSequence() {
+  const rng = mulberry32(SEED);
+  const seq = [];
+  while (seq.length < SEQUENCE_LENGTH) {
+    const bag = [...TETROMINO_NAMES];
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
+    }
+    seq.push(...bag);
+  }
+  return seq.slice(0, SEQUENCE_LENGTH);
+}
+
+// ============================================================
+// STATE MANAGEMENT
+// ============================================================
+let SEQUENCE = [];
+
+function loadSequence() {
+  const stored = localStorage.getItem('tetris_sequence');
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length === SEQUENCE_LENGTH) {
+        SEQUENCE = parsed;
+        return;
+      }
+    } catch (e) {}
+  }
+  SEQUENCE = generateSequence();
+  localStorage.setItem('tetris_sequence', JSON.stringify(SEQUENCE));
+}
+
+function emptyGrid() {
+  return Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+}
+
+function loadTeam(idx) {
+  const id = idx + 1;
+  const get = (key, fallback) => {
+    const v = localStorage.getItem(`team_${id}_${key}`);
+    if (v === null) return fallback;
+    try { return JSON.parse(v); } catch (e) { return v; }
+  };
+  return {
+    id,
+    name: get('name', DEFAULT_NAMES[idx]),
+    score: get('score', 0),
+    grid: get('grid', emptyGrid()),
+    seqIndex: get('seq_index', 0),
+    gameOver: get('gameover', false),
+    goCount: get('go_count', 0),
+    logo: get('logo', `https://placehold.co/64x64?text=T${id}`),
+    // Runtime state (not persisted)
+    placing: false,
+    rotation: 0,
+    hoverCol: null,
+    hoverRow: null,
+    lastPlaced: null
+  };
+}
+
+function saveTeam(team) {
+  const id = team.id;
+  const set = (key, value) => localStorage.setItem(`team_${id}_${key}`, JSON.stringify(value));
+  set('name', team.name);
+  set('score', team.score);
+  set('grid', team.grid);
+  set('seq_index', team.seqIndex);
+  set('gameover', team.gameOver);
+  set('go_count', team.goCount);
+  set('logo', team.logo);
+}
+
+// ============================================================
+// GAME LOGIC
+// ============================================================
+function getCurrentBlock(team) {
+  const name = SEQUENCE[team.seqIndex % SEQUENCE_LENGTH];
+  return { name, rotations: TETROMINOS[name] };
+}
+
+function getNextBlock(team) {
+  const name = SEQUENCE[(team.seqIndex + 1) % SEQUENCE_LENGTH];
+  return { name, rotations: TETROMINOS[name] };
+}
+
+function getBlockCells(blockName, rotation, rowOffset, colOffset) {
+  const shape = TETROMINOS[blockName][rotation];
+  return shape.map(([r, c]) => [r + rowOffset, c + colOffset]);
+}
+
+function isValidPlacement(grid, cells) {
+  for (const [r, c] of cells) {
+    if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return false;
+    if (grid[r][c]) return false;
+  }
+  return true;
+}
+
+// Naive drop: where would the block rest if dropped from straight above
+// at this column offset, ignoring slides? Used as a sanity helper.
+function computeDropRow(grid, blockName, rotation, colOffset) {
+  const shape = TETROMINOS[blockName][rotation];
+  const minR = Math.min(...shape.map(s => s[0]));
+  const maxR = Math.max(...shape.map(s => s[0]));
+
+  // Horizontal bounds check
+  for (const [, c] of shape) {
+    if (c + colOffset < 0 || c + colOffset >= COLS) return null;
+  }
+
+  const spawnOffset = -minR;
+  if (!isValidPlacement(grid, getBlockCells(blockName, rotation, spawnOffset, colOffset))) {
+    return null;
+  }
+
+  let rowOffset = spawnOffset;
+  while (true) {
+    const next = rowOffset + 1;
+    if (maxR + next >= ROWS) break;
+    if (!isValidPlacement(grid, getBlockCells(blockName, rotation, next, colOffset))) break;
+    rowOffset = next;
+  }
+  return rowOffset;
+}
+
+// True if (rowOffset, colOffset) is a valid resting position:
+// - all cells fit and are empty
+// - block is supported (touches floor or a filled cell directly below at least one cell)
+function isResting(grid, blockName, rotation, rowOffset, colOffset) {
+  const cells = getBlockCells(blockName, rotation, rowOffset, colOffset);
+  if (!isValidPlacement(grid, cells)) return false;
+  for (const [r, c] of cells) {
+    const br = r + 1;
+    if (br >= ROWS) return true; // touching floor
+    // If the cell directly below isn't part of this block AND is filled → supported
+    const belowIsSelf = cells.some(([cr, cc]) => cr === br && cc === c);
+    if (!belowIsSelf && grid[br][c]) return true;
+  }
+  return false;
+}
+
+// BFS over (rowOffset, colOffset) configuration space.
+// Rotation is fixed. Moves = {Down, Left, Right}. Spawns: any colOffset
+// at the topmost row where the block fits.
+// Returns:
+//   reachable: Set of "row,col" strings of all reachable valid configs
+//   landings:  Array of {rowOffset, colOffset} that are resting positions
+function computeReachability(grid, blockName, rotation) {
+  const shape = TETROMINOS[blockName][rotation];
+  const minR = Math.min(...shape.map(s => s[0]));
+  const maxR = Math.max(...shape.map(s => s[0]));
+  const minC = Math.min(...shape.map(s => s[1]));
+  const maxC = Math.max(...shape.map(s => s[1]));
+
+  const minColOffset = -minC;
+  const maxColOffset = COLS - 1 - maxC;
+  const spawnRow = -minR; // smallest valid rowOffset
+
+  const reachable = new Set();
+  const queue = [];
+  const enqueue = (ro, co) => {
+    const key = ro + ',' + co;
+    if (reachable.has(key)) return;
+    if (co < minColOffset || co > maxColOffset) return;
+    if (maxR + ro >= ROWS) return;
+    if (!isValidPlacement(grid, getBlockCells(blockName, rotation, ro, co))) return;
+    reachable.add(key);
+    queue.push([ro, co]);
+  };
+
+  // Spawn line: every column at the top where the block fits
+  for (let co = minColOffset; co <= maxColOffset; co++) {
+    enqueue(spawnRow, co);
+  }
+
+  while (queue.length) {
+    const [ro, co] = queue.shift();
+    enqueue(ro + 1, co); // down
+    enqueue(ro, co - 1); // left
+    enqueue(ro, co + 1); // right
+  }
+
+  // Filter to resting positions
+  const landings = [];
+  for (const key of reachable) {
+    const [ro, co] = key.split(',').map(Number);
+    if (isResting(grid, blockName, rotation, ro, co)) {
+      landings.push({ rowOffset: ro, colOffset: co });
+    }
+  }
+
+  return { reachable, landings };
+}
+
+// Pick the landing closest to the user's hovered column.
+// Distance = horizontal distance from block center to hoverCol.
+// Tiebreak: deeper landing (higher rowOffset).
+function pickLandingForHover(landings, blockName, rotation, hoverCol) {
+  if (!landings.length) return null;
+  const shape = TETROMINOS[blockName][rotation];
+  const minC = Math.min(...shape.map(s => s[1]));
+  const maxC = Math.max(...shape.map(s => s[1]));
+  const widthHalf = (maxC - minC) / 2;
+
+  let best = null;
+  let bestKey = [Infinity, -Infinity]; // [|dx|, -row] minimize
+  for (const l of landings) {
+    const center = l.colOffset + minC + widthHalf;
+    const dx = Math.abs(center - hoverCol);
+    const key = [dx, -l.rowOffset];
+    if (key[0] < bestKey[0] || (key[0] === bestKey[0] && key[1] < bestKey[1])) {
+      best = l;
+      bestKey = key;
+    }
+  }
+  return best;
+}
+
+// Full placement computation: returns { rowOffset, colOffset } or null.
+function computePlacement(grid, blockName, rotation, hoverCol) {
+  const { landings } = computeReachability(grid, blockName, rotation);
+  return pickLandingForHover(landings, blockName, rotation, hoverCol);
+}
+
+function hasAnyValidPlacement(grid, blockName) {
+  for (let rot = 0; rot < 4; rot++) {
+    const { landings } = computeReachability(grid, blockName, rot);
+    if (landings.length > 0) return true;
+  }
+  return false;
+}
+
+function clearLines(grid) {
+  const newGrid = [];
+  let cleared = 0;
+  for (let r = 0; r < ROWS; r++) {
+    if (grid[r].every(c => c)) {
+      cleared++;
+    } else {
+      newGrid.push(grid[r]);
+    }
+  }
+  while (newGrid.length < ROWS) {
+    newGrid.unshift(Array(COLS).fill(0));
+  }
+  return { grid: newGrid, cleared };
+}
+
+// ============================================================
+// TRASH ICON SVG
+// ============================================================
+const TRASH_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+
+// ============================================================
+// RENDERING
+// ============================================================
+const teams = [];
+const teamElements = [];
+
+function buildTeamUI(team, idx) {
+  const root = document.createElement('div');
+  root.className = 'team';
+  root.dataset.teamId = team.id;
+  root.dataset.team = team.id;
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'team-header';
+
+  const logo = document.createElement('img');
+  logo.className = 'team-logo';
+  logo.src = team.logo;
+  logo.alt = `${team.name} Logo`;
+  logo.addEventListener('click', () => {
+    const url = prompt('Bild-URL für Team-Logo:', team.logo);
+    if (url && url.trim()) {
+      team.logo = url.trim();
+      logo.src = team.logo;
+      saveTeam(team);
+    }
+  });
+  header.appendChild(logo);
+
+  const name = document.createElement('div');
+  name.className = 'team-name';
+  name.textContent = team.name;
+  name.addEventListener('dblclick', () => editTeamName(team, name));
+  header.appendChild(name);
+
+  const score = document.createElement('div');
+  score.className = 'team-score';
+  score.textContent = team.score.toLocaleString('de-DE');
+  header.appendChild(score);
+
+  const goCounter = document.createElement('div');
+  goCounter.className = 'go-counter';
+  header.appendChild(goCounter);
+
+  root.appendChild(header);
+
+  // Active + Next block preview
+  const previewSection = document.createElement('div');
+  previewSection.className = 'preview-section';
+
+  const activeBlock = document.createElement('div');
+  activeBlock.className = 'preview-block';
+  const activeLabel = document.createElement('div');
+  activeLabel.className = 'preview-label active';
+  activeLabel.textContent = 'Active';
+  activeBlock.appendChild(activeLabel);
+  const activeGrid = document.createElement('div');
+  activeGrid.className = 'next-grid active';
+  const activeCells = [];
+  for (let i = 0; i < 16; i++) {
+    const c = document.createElement('div');
+    c.className = 'next-cell';
+    activeGrid.appendChild(c);
+    activeCells.push(c);
+  }
+  activeBlock.appendChild(activeGrid);
+  previewSection.appendChild(activeBlock);
+
+  const nextBlock = document.createElement('div');
+  nextBlock.className = 'preview-block';
+  const nextLabel = document.createElement('div');
+  nextLabel.className = 'preview-label';
+  nextLabel.textContent = 'Next';
+  nextBlock.appendChild(nextLabel);
+  const nextGrid = document.createElement('div');
+  nextGrid.className = 'next-grid';
+  const nextCells = [];
+  for (let i = 0; i < 16; i++) {
+    const c = document.createElement('div');
+    c.className = 'next-cell';
+    nextGrid.appendChild(c);
+    nextCells.push(c);
+  }
+  nextBlock.appendChild(nextGrid);
+  previewSection.appendChild(nextBlock);
+
+  root.appendChild(previewSection);
+
+  // Main grid
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+  const cells = [];
+  for (let r = 0; r < ROWS; r++) {
+    const row = [];
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      grid.appendChild(cell);
+      row.push(cell);
+    }
+    cells.push(row);
+  }
+
+  // Game over overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'game-over-overlay';
+  overlay.style.display = 'none';
+  const overlayText = document.createElement('div');
+  overlayText.className = 'game-over-text';
+  overlayText.textContent = 'GAME OVER';
+  const overlayScore = document.createElement('div');
+  overlayScore.className = 'game-over-score';
+  overlay.appendChild(overlayText);
+  overlay.appendChild(overlayScore);
+  grid.appendChild(overlay);
+
+  root.appendChild(grid);
+
+  // Controls
+  const controls = document.createElement('div');
+  controls.className = 'controls';
+
+  const goBtn = document.createElement('button');
+  goBtn.className = 'btn-go';
+  goBtn.textContent = `GO ${team.name}`;
+  goBtn.addEventListener('click', () => onGoClick(team));
+  controls.appendChild(goBtn);
+
+  const rotBtn = document.createElement('button');
+  rotBtn.className = 'btn-rotate';
+  rotBtn.textContent = '↻';
+  rotBtn.title = 'Rotieren (R)';
+  rotBtn.addEventListener('click', () => onRotateClick(team));
+  controls.appendChild(rotBtn);
+
+  root.appendChild(controls);
+
+  // Grid event listeners
+  grid.addEventListener('mousemove', (e) => onGridHover(team, e));
+  grid.addEventListener('mouseleave', () => onGridLeave(team));
+  grid.addEventListener('click', (e) => onGridClick(team, e));
+
+  return {
+    root, logo, name, score, goCounter,
+    activeCells, nextCells, grid, cells, overlay, overlayScore,
+    goBtn, rotBtn
+  };
+}
+
+function editTeamName(team, nameEl) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'team-name-input';
+  input.value = team.name;
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  const finish = (commit) => {
+    const newName = commit ? input.value.trim() || team.name : team.name;
+    team.name = newName;
+    nameEl.textContent = newName;
+    input.replaceWith(nameEl);
+    teamElements[team.id - 1].goBtn.textContent = team.placing ? 'ABBRECHEN' : `GO ${newName}`;
+    saveTeam(team);
+  };
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+}
+
+function renderTeam(team) {
+  const el = teamElements[team.id - 1];
+
+  el.score.textContent = team.score.toLocaleString('de-DE');
+  el.name.textContent = team.name;
+
+  // GO counter: "GO 5" format
+  el.goCounter.innerHTML = `GO <strong>${team.goCount}</strong>`;
+
+  // Grid base
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = el.cells[r][c];
+      cell.classList.remove('ghost', 'last-placed');
+      if (team.grid[r][c]) {
+        cell.classList.add('filled');
+      } else {
+        cell.classList.remove('filled');
+      }
+    }
+  }
+
+  // Last placed highlight
+  if (team.lastPlaced) {
+    for (const [r, c] of team.lastPlaced) {
+      if (team.grid[r] && team.grid[r][c]) {
+        el.cells[r][c].classList.remove('filled');
+        el.cells[r][c].classList.add('last-placed');
+      }
+    }
+  }
+
+  // Ghost preview: prefer landing that contains the hovered cell.
+  if (team.placing && team.hoverCol !== null && !team.gameOver) {
+    const block = getCurrentBlock(team);
+    const { landings } = computeReachability(team.grid, block.name, team.rotation);
+    let chosen = null;
+    if (team.hoverRow !== null && team.hoverRow !== undefined) {
+      for (const l of landings) {
+        const cells = getBlockCells(block.name, team.rotation, l.rowOffset, l.colOffset);
+        if (cells.some(([cr, cc]) => cr === team.hoverRow && cc === team.hoverCol)) {
+          if (!chosen || l.rowOffset > chosen.rowOffset) chosen = l;
+        }
+      }
+    }
+    if (!chosen) {
+      chosen = pickLandingForHover(landings, block.name, team.rotation, team.hoverCol);
+    }
+    if (chosen) {
+      const ghostCells = getBlockCells(block.name, team.rotation, chosen.rowOffset, chosen.colOffset);
+      for (const [r, c] of ghostCells) {
+        if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+          el.cells[r][c].classList.add('ghost');
+        }
+      }
+    }
+  }
+
+  // Preview rendering
+  const renderPreview = (cells, blockName, rotation) => {
+    for (let i = 0; i < 16; i++) cells[i].classList.remove('filled');
+    if (!blockName) return;
+    const shape = TETROMINOS[blockName][rotation || 0];
+    for (const [r, c] of shape) {
+      const idx = r * 4 + c;
+      if (idx >= 0 && idx < 16) cells[idx].classList.add('filled');
+    }
+  };
+
+  const active = getCurrentBlock(team);
+  renderPreview(el.activeCells, active.name, team.placing ? team.rotation : 0);
+
+  const next = getNextBlock(team);
+  renderPreview(el.nextCells, next.name, 0);
+
+  // Buttons
+  el.goBtn.disabled = false;
+  el.rotBtn.disabled = !team.placing || team.gameOver;
+  el.goBtn.classList.toggle('placing', team.placing);
+  if (team.gameOver) {
+    el.goBtn.textContent = `GO ${team.name} (Reset)`;
+  } else {
+    el.goBtn.textContent = team.placing ? 'ABBRECHEN' : `GO ${team.name}`;
+  }
+  el.grid.classList.toggle('placing', team.placing && !team.gameOver);
+
+  if (team.gameOver) {
+    el.overlay.style.display = 'flex';
+    el.overlayScore.textContent = `Score: ${team.score.toLocaleString('de-DE')}`;
+  } else {
+    el.overlay.style.display = 'none';
+  }
+}
+
+// ============================================================
+// EVENT HANDLERS
+// ============================================================
+function onGoClick(team) {
+  if (team.gameOver) {
+    team.gameOver = false;
+    team.grid = emptyGrid();
+    team.lastPlaced = null;
+    team.placing = false;
+    team.rotation = 0;
+    team.hoverCol = null;
+    team.hoverRow = null;
+    saveTeam(team);
+    renderTeam(team);
+    updateBackground();
+    return;
+  }
+
+  if (!team.placing) {
+    team.goCount += 1;
+    team.placing = true;
+    team.rotation = 0;
+    team.hoverCol = null;
+    team.hoverRow = null;
+    team.lastPlaced = null;
+
+    const block = getCurrentBlock(team);
+    if (!hasAnyValidPlacement(team.grid, block.name)) {
+      team.gameOver = true;
+      team.placing = false;
+    }
+  } else {
+    // Cancel placement
+    team.placing = false;
+    team.hoverCol = null;
+    team.hoverRow = null;
+    team.goCount = Math.max(0, team.goCount - 1);
+  }
+  saveTeam(team);
+  renderTeam(team);
+}
+
+function onRotateClick(team) {
+  if (!team.placing || team.gameOver) return;
+  team.rotation = (team.rotation + 1) % 4;
+  renderTeam(team);
+}
+
+function onResetAllClick() {
+  if (!confirm('Wirklich ALLE Teams komplett zurücksetzen? Score, Grid, Sequenz-Index und GO-Counter werden für alle Teams gelöscht.')) return;
+  for (const team of teams) {
+    team.score = 0;
+    team.grid = emptyGrid();
+    team.seqIndex = 0;
+    team.gameOver = false;
+    team.placing = false;
+    team.rotation = 0;
+    team.hoverCol = null;
+    team.hoverRow = null;
+    team.lastPlaced = null;
+    team.goCount = 0;
+    saveTeam(team);
+    renderTeam(team);
+  }
+  updateBackground();
+}
+
+function onGridHover(team, e) {
+  if (!team.placing || team.gameOver) return;
+  const target = e.target.closest('.cell');
+  if (!target) return;
+  const row = parseInt(target.dataset.r);
+  const col = parseInt(target.dataset.c);
+  if (col !== team.hoverCol || row !== team.hoverRow) {
+    team.hoverCol = col;
+    team.hoverRow = row;
+    renderTeam(team);
+  }
+}
+
+function onGridLeave(team) {
+  if (team.hoverCol !== null || team.hoverRow !== null) {
+    team.hoverCol = null;
+    team.hoverRow = null;
+    renderTeam(team);
+  }
+}
+
+function onGridClick(team, e) {
+  if (team.gameOver) return;
+  const target = e.target.closest('.cell');
+  if (!target) return;
+  const r = parseInt(target.dataset.r);
+  const c = parseInt(target.dataset.c);
+
+  // Not placing: check if user clicks last placed block to pick it up
+  if (!team.placing) {
+    if (team.lastPlaced && team.lastPlaced.some(([lr, lc]) => lr === r && lc === c)) {
+      for (const [lr, lc] of team.lastPlaced) {
+        team.grid[lr][lc] = 0;
+      }
+      team.seqIndex = (team.seqIndex - 1 + SEQUENCE_LENGTH) % SEQUENCE_LENGTH;
+      team.lastPlaced = null;
+      team.placing = true;
+      team.rotation = 0;
+      team.hoverCol = c;
+      saveTeam(team);
+      renderTeam(team);
+    }
+    return;
+  }
+
+  // Placing mode: prefer a landing that contains the clicked cell;
+  // fall back to nearest landing to the clicked column.
+  const block = getCurrentBlock(team);
+  const { landings } = computeReachability(team.grid, block.name, team.rotation);
+  if (!landings.length) return;
+
+  let chosen = null;
+  // Try: any landing covers the clicked cell?
+  for (const l of landings) {
+    const cells = getBlockCells(block.name, team.rotation, l.rowOffset, l.colOffset);
+    if (cells.some(([cr, cc]) => cr === r && cc === c)) {
+      // Prefer deepest among matching
+      if (!chosen || l.rowOffset > chosen.rowOffset) chosen = l;
+    }
+  }
+  if (!chosen) {
+    chosen = pickLandingForHover(landings, block.name, team.rotation, c);
+  }
+  if (!chosen) return;
+
+  const cells = getBlockCells(block.name, team.rotation, chosen.rowOffset, chosen.colOffset);
+  for (const [pr, pc] of cells) {
+    team.grid[pr][pc] = 1;
+  }
+  team.lastPlaced = cells;
+  team.placing = false;
+  team.hoverCol = null;
+  team.seqIndex = (team.seqIndex + 1) % SEQUENCE_LENGTH;
+
+  // Clear lines
+  const { grid: clearedGrid, cleared } = clearLines(team.grid);
+  if (cleared > 0) {
+    team.grid = clearedGrid;
+    team.score += SCORE_TABLE[cleared] || 0;
+    team.lastPlaced = null;
+  }
+
+  // Check game over with next block
+  const next = getCurrentBlock(team);
+  if (!hasAnyValidPlacement(team.grid, next.name)) {
+    team.gameOver = true;
+  }
+
+  saveTeam(team);
+  renderTeam(team);
+  updateBackground();
+}
+
+// Keyboard: R rotates any team in placing mode
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'r' || e.key === 'R') {
+    if (e.target.tagName === 'INPUT') return;
+    teams.forEach(t => {
+      if (t.placing && !t.gameOver) {
+        t.rotation = (t.rotation + 1) % 4;
+        renderTeam(t);
+      }
+    });
+  }
+});
+
+// ============================================================
+// EXPORT / IMPORT
+// ============================================================
+function exportState() {
+  const exportedAt = new Date().toISOString();
+  const sequence = SEQUENCE;
+  const teamsData = teams.map(t => ({
+    id: t.id,
+    name: t.name,
+    score: t.score,
+    grid: t.grid,
+    seqIndex: t.seqIndex,
+    gameOver: t.gameOver,
+    goCount: t.goCount,
+    logo: t.logo
+  }));
+
+  const data = {
+    version: 1,
+    exportedAt,
+    sequence,
+    teams: teamsData
+  };
+
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const filename = `team-tetris-crush-${dateStr}.json`;
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importState(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let data;
+    try {
+      data = JSON.parse(e.target.result);
+    } catch (err) {
+      alert('Ungültiges Dateiformat: JSON konnte nicht geparst werden.');
+      return;
+    }
+
+    // Validation
+    if (!data || typeof data !== 'object') {
+      alert('Ungültiges Dateiformat: Kein gültiges Objekt.');
+      return;
+    }
+    if (data.version !== 1) {
+      alert(`Ungültiges Dateiformat: Unbekannte Version "${data.version}".`);
+      return;
+    }
+    if (!Array.isArray(data.sequence) || data.sequence.length !== SEQUENCE_LENGTH) {
+      alert(`Ungültiges Dateiformat: Sequenz hat falsche Länge (erwartet ${SEQUENCE_LENGTH}, erhalten ${Array.isArray(data.sequence) ? data.sequence.length : 'n/a'}).`);
+      return;
+    }
+    if (!Array.isArray(data.teams) || data.teams.length !== TEAM_COUNT) {
+      alert(`Ungültiges Dateiformat: Falsche Anzahl Teams (erwartet ${TEAM_COUNT}, erhalten ${Array.isArray(data.teams) ? data.teams.length : 'n/a'}).`);
+      return;
+    }
+    for (const t of data.teams) {
+      if (typeof t.id !== 'number' || typeof t.name !== 'string' ||
+          typeof t.score !== 'number' || !Array.isArray(t.grid) ||
+          typeof t.seqIndex !== 'number' || typeof t.gameOver !== 'boolean' ||
+          typeof t.goCount !== 'number' || typeof t.logo !== 'string') {
+        alert(`Ungültiges Dateiformat: Team ${t.id} hat fehlende oder falsche Felder.`);
+        return;
+      }
+      if (t.grid.length !== ROWS || !t.grid.every(row => Array.isArray(row) && row.length === COLS)) {
+        alert(`Ungültiges Dateiformat: Grid von Team ${t.id} hat falsche Dimensionen.`);
+        return;
+      }
+    }
+
+    if (!confirm('Aktuellen Zustand überschreiben? Alle aktuellen Daten gehen verloren.')) return;
+
+    // Write to localStorage
+    localStorage.setItem('tetris_sequence', JSON.stringify(data.sequence));
+    for (const t of data.teams) {
+      const id = t.id;
+      const set = (key, value) => localStorage.setItem(`team_${id}_${key}`, JSON.stringify(value));
+      set('name', t.name);
+      set('score', t.score);
+      set('grid', t.grid);
+      set('seq_index', t.seqIndex);
+      set('gameover', t.gameOver);
+      set('go_count', t.goCount);
+      set('logo', t.logo);
+    }
+
+    location.reload();
+  };
+  reader.readAsText(file);
+}
+
+// ============================================================
+// DYNAMIC BACKGROUND MOSAIC
+// ============================================================
+// 4 Tiles rendern: jedes ist das aktuelle Team-Grid in der Akzentfarbe,
+// jedes mit eigener Transformation (siehe data-tx in CSS):
+//   tile 0: Team 1, normal
+//   tile 1: Team 2, scaleX(-1)   (horizontal gespiegelt)
+//   tile 2: Team 3, rotate(180)
+//   tile 3: Team 4, scaleY(-1)   (vertikal gespiegelt)
+const BG_LAYOUT = [
+  { teamIdx: 0, tx: 0 },
+  { teamIdx: 1, tx: 1 },
+  { teamIdx: 2, tx: 2 },
+  { teamIdx: 3, tx: 3 }
+];
+
+let bgBuilt = false;
+let bgTiles = []; // [{cells: [[cell,...],...]}]
+
+function buildBackgroundOnce() {
+  if (bgBuilt) return;
+  const mosaic = document.getElementById('bgMosaic');
+  bgTiles = [];
+  for (let t = 0; t < 4; t++) {
+    const tile = document.createElement('div');
+    tile.className = 'bg-tile';
+    tile.dataset.tx = String(BG_LAYOUT[t].tx);
+    const cells = [];
+    for (let r = 0; r < ROWS; r++) {
+      const row = [];
+      for (let c = 0; c < COLS; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'bg-cell';
+        tile.appendChild(cell);
+        row.push(cell);
+      }
+      cells.push(row);
+    }
+    mosaic.appendChild(tile);
+    bgTiles.push({ cells });
+  }
+  bgBuilt = true;
+}
+
+// Feste Akzentfarben pro Team, parallel zu CSS [data-team] Vars.
+const TEAM_ACCENTS = ['#3a8fc4', '#d97a2b', '#d6298b', '#45a454'];
+
+function updateBackground() {
+  buildBackgroundOnce();
+  for (let t = 0; t < 4; t++) {
+    const layout = BG_LAYOUT[t];
+    const team = teams[layout.teamIdx];
+    if (!team) continue;
+    const accent = TEAM_ACCENTS[layout.teamIdx] || '#45a454';
+    const tile = bgTiles[t];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const cell = tile.cells[r][c];
+        if (team.grid[r][c]) {
+          cell.classList.add('filled');
+          cell.style.background = accent;
+        } else {
+          cell.classList.remove('filled');
+          cell.style.background = '';
+        }
+      }
+    }
+  }
+}
+
+document.getElementById('btnExport').addEventListener('click', exportState);
+
+document.getElementById('btnImport').addEventListener('click', () => {
+  document.getElementById('importFileInput').value = '';
+  document.getElementById('importFileInput').click();
+});
+
+document.getElementById('importFileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) importState(file);
+});
+
+// Globaler Reset-Button: Trash-Icon einsetzen + Listener
+const btnResetAll = document.getElementById('btnResetAll');
+btnResetAll.innerHTML = TRASH_SVG + ' Reset';
+btnResetAll.addEventListener('click', onResetAllClick);
+
+// ============================================================
+// INIT
+// ============================================================
+function init() {
+  loadSequence();
+  const container = document.getElementById('teamsContainer');
+  for (let i = 0; i < TEAM_COUNT; i++) {
+    const team = loadTeam(i);
+    teams.push(team);
+    const el = buildTeamUI(team, i);
+    teamElements.push(el);
+    container.appendChild(el.root);
+    renderTeam(team);
+  }
+  updateBackground();
+}
+
+init();
+</script>
+</body>
+</html>
